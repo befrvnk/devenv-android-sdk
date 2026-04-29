@@ -1,0 +1,9 @@
+inputs:
+  android-sdk:
+    url: github:befrvnk/devenv-android-sdk
+    flake: false
+
+imports:
+  - android-sdk/module.nix
+
+allowUnfree: true
