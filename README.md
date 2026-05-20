@@ -154,6 +154,12 @@ androidSdk = {
 };
 ```
 
+## Repository automation
+
+This repository includes a scheduled GitHub Actions workflow that runs `nix run .#update-repo-json`, validates that only the bundled `repo.json` changed, runs `nix flake check`, and opens or updates an automated PR.
+
+The workflow also attempts to enable auto-merge for that PR. For protected branches, enable repository auto-merge and consider setting an `UPDATE_REPO_JSON_TOKEN` secret backed by a fine-grained PAT or GitHub App token that is allowed to open PRs and merge them after checks pass. Pull requests created with the default `GITHUB_TOKEN` do not trigger follow-up `push` or `pull_request` workflows, so use `UPDATE_REPO_JSON_TOKEN` if branch protection requires PR status checks before auto-merge.
+
 ## Notes
 
 - If you use the bundled `repo.json` only, `update-android-sdk-repo` cannot mutate it when the module is imported from GitHub because Nix inputs are read-only store paths.

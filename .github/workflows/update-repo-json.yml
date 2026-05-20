@@ -1,0 +1,97 @@
+name: Update Android SDK repo metadata
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Weekly, early Monday UTC.
+    - cron: "17 3 * * 1"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update:
+    name: Update repo.json
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Update repo.json from Google
+        run: nix run .#update-repo-json
+
+      - name: Verify only repo.json changed
+        id: verify
+        run: |
+          set -euo pipefail
+
+          changed_paths="$(
+            {
+              git diff --name-only
+              git diff --name-only --cached
+              git ls-files --others --exclude-standard
+            } | sort -u
+          )"
+
+          if [ -z "$changed_paths" ]; then
+            echo "No repo.json update available."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          unexpected_paths="$(printf '%s\n' "$changed_paths" | grep -vx 'repo.json' || true)"
+          if [ -n "$unexpected_paths" ]; then
+            echo "Unexpected files changed:" >&2
+            printf '%s\n' "$unexpected_paths" >&2
+            exit 1
+          fi
+
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Run validation checks
+        if: steps.verify.outputs.changed == 'true'
+        run: nix flake check --print-build-logs
+
+      - name: Create or update pull request
+        if: steps.verify.outputs.changed == 'true'
+        id: cpr
+        uses: peter-evans/create-pull-request@v8
+        with:
+          # If configured, UPDATE_REPO_JSON_TOKEN must be a valid token with
+          # contents:write and pull-requests:write. Otherwise GITHUB_TOKEN is used.
+          token: ${{ secrets.UPDATE_REPO_JSON_TOKEN || github.token }}
+          commit-message: Update Android SDK repo metadata
+          branch: automation/update-android-sdk-repo
+          delete-branch: true
+          title: Update Android SDK repo metadata
+          body: |
+            Automated update of `repo.json` from Google's Android SDK repository metadata.
+
+            Guardrails in this workflow:
+            - regenerates `repo.json` using `nix run .#update-repo-json`
+            - fails if any file other than `repo.json` changes
+            - runs `nix flake check` before opening/updating the PR
+          add-paths: |
+            repo.json
+
+      - name: Enable auto-merge
+        if: steps.verify.outputs.changed == 'true' && steps.cpr.outputs.pull-request-number != ''
+        env:
+          GH_TOKEN: ${{ secrets.UPDATE_REPO_JSON_TOKEN || github.token }}
+          PR_NUMBER: ${{ steps.cpr.outputs.pull-request-number }}
+        run: |
+          set -euo pipefail
+
+          if gh pr merge "$PR_NUMBER" --squash --auto --delete-branch; then
+            echo "Auto-merge enabled for PR #$PR_NUMBER."
+          else
+            echo "::warning::Could not enable auto-merge for PR #$PR_NUMBER. Enable repository auto-merge, or set UPDATE_REPO_JSON_TOKEN to a token allowed to merge PRs."
+          fi
