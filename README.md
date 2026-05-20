@@ -16,6 +16,7 @@ This is useful when Google has released new Android SDK packages but nixpkgs' ve
   - `ANDROID_SDK_ROOT`
   - `ANDROID_NDK_ROOT`
 - Optionally sets Gradle's `aapt2FromMavenOverride` to the Nix-provided `aapt2`
+- Fixes Android SDK source ZIPs with duplicate entries (for example API 37.0 sources) by unpacking them non-interactively
 
 ## Quick start
 
@@ -145,6 +146,7 @@ androidSdk = {
   includeEmulator = true;
   includeNDK = true;
   includeSources = false;
+  fixDuplicateZipEntries = true;
   includeSystemImages = true;
   systemImageTypes = [ "google_apis_playstore" ];
   abis = [ "x86_64" ];
@@ -165,3 +167,4 @@ The workflow also attempts to enable auto-merge for that PR. For protected branc
 - If you use the bundled `repo.json` only, `update-android-sdk-repo` cannot mutate it when the module is imported from GitHub because Nix inputs are read-only store paths.
 - For fast per-project updates, set `repoJson` to a project-local committed file and `repoJsonWritablePath` to the same path as a string.
 - This module accepts Android SDK licenses by default via `androidSdk.licenseAccepted = true`.
+- When `includeSources = true`, `fixDuplicateZipEntries = true` scopes a patched unzip setup hook to androidenv. This works around Google source ZIPs such as `source-37.0_r01.zip` that contain duplicate entries and would otherwise make nixpkgs' default `unzip -qq` prompt during non-interactive Nix builds.

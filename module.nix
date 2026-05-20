@@ -16,9 +16,46 @@ let
     ]
   );
 
-  androidEnv = pkgs.androidenv.override {
-    licenseAccepted = cfg.licenseAccepted;
+  # Google occasionally publishes Android SDK source ZIPs with duplicate entries
+  # (for example source-37.0_r01.zip). nixpkgs' unzip setup hook uses
+  # `unzip -qq`, which prompts before replacing existing files and fails in
+  # non-interactive Nix builds. Scope a tiny unzip wrapper to androidenv so
+  # deploy-androidpackages.nix still uses nixpkgs unchanged, but its unpackFile
+  # calls overwrite duplicate ZIP entries non-interactively with `unzip -oqq`.
+  androidEnvUnzip = pkgs.runCommand "${pkgs.unzip.name}-androidenv" { preferLocalBuild = true; } ''
+    mkdir -p "$out/bin" "$out/nix-support"
+    ln -s ${pkgs.unzip}/bin/* "$out/bin/"
+
+    cat > "$out/nix-support/setup-hook" <<'EOF'
+    unpackCmdHooks+=(_tryUnzip)
+    _tryUnzip() {
+        if ! [[ "$curSrc" =~ \.zip$ ]]; then return 1; fi
+
+        # Keep nixpkgs' UTF-8 handling, but add -o so duplicate entries in
+        # Google's Android SDK source ZIPs do not trigger an interactive prompt.
+        LANG=en_US.UTF-8 unzip -oqq "$curSrc"
+    }
+    EOF
+  '';
+
+  androidEnvCallPackage = pkgs.newScope {
+    unzip = androidEnvUnzip;
+    callPackage = androidEnvCallPackage;
   };
+
+  androidEnvPkgs = pkgs // {
+    unzip = androidEnvUnzip;
+    callPackage = androidEnvCallPackage;
+  };
+
+  androidEnv = pkgs.androidenv.override (
+    {
+      licenseAccepted = cfg.licenseAccepted;
+    }
+    // lib.optionalAttrs (cfg.fixDuplicateZipEntries && cfg.includeSources) {
+      pkgs = androidEnvPkgs;
+    }
+  );
 
   androidSdkArgs = {
     repoJson = cfg.repoJson;
@@ -181,6 +218,16 @@ in
       type = lib.types.bool;
       default = false;
       description = "Whether to include Android platform sources.";
+    };
+
+    fixDuplicateZipEntries = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = ''
+        Whether to patch androidenv's unzip setup hook when sources are enabled
+        so Android SDK ZIPs with duplicate entries (such as Google's
+        source-37.0_r01.zip) are unpacked non-interactively.
+      '';
     };
 
     includeSystemImages = lib.mkOption {
