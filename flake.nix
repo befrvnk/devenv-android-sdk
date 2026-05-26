@@ -86,6 +86,12 @@
           program = "${self.packages.${system}.update-repo-json}/bin/update-repo-json";
           meta.description = "Update repo.json from Google's Android SDK repository metadata";
         };
+
+        generate-sdk-version-report = {
+          type = "app";
+          program = "${self.packages.${system}.check-sdk-versions}/bin/generate-sdk-version-report";
+          meta.description = "Generate an Android SDK version report for metadata update PRs";
+        };
       });
 
       checks = forAllSystems (

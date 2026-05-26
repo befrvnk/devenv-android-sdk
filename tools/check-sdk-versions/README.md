@@ -2,18 +2,23 @@
 
 Typed implementation of the `check-sdk-versions` command exposed by `module.nix`.
 
-The tool is intentionally dependency-light: it is a Go CLI using only the Go standard library for JSON, XML, HTTP, and version handling. `module.nix` generates a small JSON config from the current `androidSdk` options and runs this binary.
+The tool is intentionally dependency-light: it uses only the Go standard library for JSON, XML, HTTP, and version handling. `module.nix` generates a small JSON config from the current `androidSdk` options and runs the `check-sdk-versions` binary.
 
 ## Layout
 
 ```text
 tools/check-sdk-versions/
-  default.nix  # Nix package for the Go CLI
+  default.nix  # Nix package for the Go commands
   README.md    # this file
-  src/         # Go module, sources, and tests
+  src/
+    cmd/
+      check-sdk-versions/          # user-facing checker command
+      generate-sdk-version-report/ # GitHub Actions report helper
+    sdkversions/                   # shared implementation and tests
+    go.mod
 ```
 
-Keeping Go code under `src/` leaves the tool root for Nix packaging and documentation files.
+Keeping Go code under `src/` leaves the tool root for Nix packaging and documentation files. The Nix package builds both commands.
 
 ## Responsibilities
 
@@ -54,13 +59,13 @@ nix shell nixpkgs#nixfmt --command nixfmt module.nix flake.nix devenv.nix
 
 ## Running locally
 
-Build the binary through the repository flake:
+Build the binaries through the repository flake:
 
 ```bash
 nix build .#check-sdk-versions
 ```
 
-Run it with a config file:
+Run the checker with a config file:
 
 ```bash
 ./result/bin/check-sdk-versions --config /path/to/check-sdk-versions-config.json
@@ -71,6 +76,16 @@ For tests that should not hit the network, pass an empty Google URL:
 ```bash
 ./result/bin/check-sdk-versions --config /path/to/config.json --google-url ''
 ```
+
+Generate the bundled-metadata report used by the repository automation:
+
+```bash
+nix run .#generate-sdk-version-report -- \
+  --repo-json "$PWD/repo.json" \
+  --flake-lock "$PWD/flake.lock"
+```
+
+In GitHub Actions, pass `--github-output "$GITHUB_OUTPUT"` to also write the report to the `report` step output.
 
 ## Config shape
 
@@ -105,6 +120,8 @@ Unit tests cover:
 - guidance for bundled vs writable metadata workflows
 - end-to-end checker output with local fixture metadata and an in-process Google XML test server
 - missing configured-version reporting
+- flake.lock nixpkgs resolution for the automation helper
+- GitHub Actions multiline output formatting
 
 Run:
 

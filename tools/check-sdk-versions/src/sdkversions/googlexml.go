@@ -1,4 +1,4 @@
-package main
+package sdkversions
 
 import (
 	"encoding/xml"
@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-const defaultGoogleRepositoryURL = "https://dl.google.com/android/repository/repository2-3.xml"
+const DefaultGoogleRepositoryURL = "https://dl.google.com/android/repository/repository2-3.xml"
 
 type PackageKind int
 

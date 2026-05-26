@@ -7,5 +7,10 @@ buildGoModule {
   src = ./src;
   vendorHash = null;
 
+  subPackages = [
+    "cmd/check-sdk-versions"
+    "cmd/generate-sdk-version-report"
+  ];
+
   doCheck = true;
 }
