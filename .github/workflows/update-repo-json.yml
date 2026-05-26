@@ -60,6 +60,58 @@ jobs:
         if: steps.verify.outputs.changed == 'true'
         run: nix flake check --print-build-logs
 
+      - name: Generate SDK version report
+        if: steps.verify.outputs.changed == 'true'
+        id: sdk-report
+        run: |
+          set -euo pipefail
+
+          checker="$(nix build --no-link --print-out-paths .#check-sdk-versions)/bin/check-sdk-versions"
+          nixpkgs_repo="$({
+            nix eval --raw --impure --expr '
+              let
+                lock = builtins.fromJSON (builtins.readFile ./flake.lock);
+                locked = lock.nodes.nixpkgs.locked;
+              in
+                builtins.fetchTree {
+                  type = locked.type;
+                  owner = locked.owner;
+                  repo = locked.repo;
+                  rev = locked.rev;
+                  narHash = locked.narHash;
+                }
+            '
+          })/pkgs/development/mobile/androidenv/repo.json"
+
+          config="$(mktemp)"
+          report="$(mktemp)"
+
+          cat > "$config" <<EOF
+          {
+            "usedRepoJson": "$PWD/repo.json",
+            "nixpkgsRepoJson": "$nixpkgs_repo",
+            "metadataMode": "bundled/pinned read-only",
+            "metadataWritable": false,
+            "configured": {
+              "platforms": ["36"],
+              "buildTools": ["37.0.0"],
+              "platformTools": "37.0.0",
+              "emulator": "36.6.6",
+              "ndk": "28.2.13676358",
+              "cmdlineTools": "11.0",
+              "cmake": ["3.22.1"]
+            }
+          }
+          EOF
+
+          "$checker" --config "$config" > "$report"
+
+          {
+            echo 'report<<SDK_REPORT_EOF'
+            cat "$report"
+            echo 'SDK_REPORT_EOF'
+          } >> "$GITHUB_OUTPUT"
+
       - name: Create or update pull request
         if: steps.verify.outputs.changed == 'true'
         id: cpr
@@ -79,6 +131,12 @@ jobs:
             - regenerates `repo.json` using `nix run .#update-repo-json`
             - fails if any file other than `repo.json` changes
             - runs `nix flake check` before opening/updating the PR
+
+            ## SDK version report
+
+            ```text
+            ${{ steps.sdk-report.outputs.report }}
+            ```
           add-paths: |
             repo.json
 
