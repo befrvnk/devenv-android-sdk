@@ -86,17 +86,42 @@ let
   repoJsonForChecks =
     if cfg.repoJsonWritablePath != null then cfg.repoJsonWritablePath else toString cfg.repoJson;
 
+  repoJsonMetadataMode =
+    if cfg.repoJsonWritablePath != null then "project-local writable" else "bundled/pinned read-only";
+
+  checkSdkVersions = pkgs.callPackage ./tools/check-sdk-versions { };
+
+  checkSdkVersionsConfig = pkgs.writeText "check-sdk-versions-config.json" (
+    builtins.toJSON {
+      usedRepoJson = repoJsonForChecks;
+      nixpkgsRepoJson = "${pkgs.path}/pkgs/development/mobile/androidenv/repo.json";
+      metadataMode = repoJsonMetadataMode;
+      metadataWritable = cfg.repoJsonWritablePath != null;
+      configured = {
+        platforms = cfg.platforms;
+        buildTools = cfg.buildTools;
+        platformTools = cfg.platformTools;
+        emulator = cfg.emulator;
+        ndk = cfg.ndk;
+        cmdlineTools = cfg.cmdLineTools;
+        cmake = cfg.cmake;
+      };
+    }
+  );
+
   updateRepoScript =
     if cfg.repoJsonWritablePath == null then
       ''
-        echo "No writable Android SDK repo.json path is configured."
+        echo "This shell uses bundled/pinned Android SDK metadata (repoJsonWritablePath = null)."
+        echo "The bundled repo.json comes from the pinned android-sdk input and is read-only."
         echo ""
-        echo "Set androidSdk.repoJsonWritablePath in devenv.nix, for example:"
+        echo "To update this workflow, update this module's bundled repo.json upstream,"
+        echo "then update the consuming project's pinned android-sdk input and reload the shell."
+        echo ""
+        echo "If you intentionally want project-local writable metadata instead, configure:"
         echo ""
         echo "  androidSdk.repoJson = ./nix/android-sdk/repo.json;"
         echo "  androidSdk.repoJsonWritablePath = \"nix/android-sdk/repo.json\";"
-        echo ""
-        echo "Then run update-android-sdk-repo again."
         exit 1
       ''
     else
@@ -122,7 +147,8 @@ let
         echo ""
         echo "✓ Updated $REPO_JSON"
         echo ""
-        echo "Reload your devenv shell so Nix composes the SDK from the updated metadata."
+        echo "Commit the changed $REPO_JSON, then reload your devenv shell so Nix composes"
+        echo "the SDK from the updated metadata."
         echo ""
         check-sdk-versions
       '';
@@ -315,124 +341,7 @@ in
     };
 
     scripts.check-sdk-versions.exec = ''
-      echo "Checking for Android SDK updates..."
-      echo ""
-
-      CURRENT_PLATFORM="${builtins.head cfg.platforms}"
-      CURRENT_BUILD_TOOLS="${builtins.head cfg.buildTools}"
-      CURRENT_PLATFORM_TOOLS="${cfg.platformTools}"
-      CURRENT_EMULATOR="${cfg.emulator}"
-
-      echo "Current versions (devenv.nix):"
-      echo "  platforms:      ${builtins.concatStringsSep ", " cfg.platforms}"
-      echo "  build-tools:    ${builtins.concatStringsSep ", " cfg.buildTools}"
-      echo "  platform-tools: ${cfg.platformTools}"
-      echo "  emulator:       ${cfg.emulator}"
-      echo ""
-
-      latest_platform_from_json() {
-        ${pkgs.jq}/bin/jq -r '.packages.platforms | keys[]' "$1" | grep -oE '^[0-9]+(\.[0-9]+)?$' | sort -V | tail -1
-      }
-
-      latest_package_from_json() {
-        local repo_json="$1"
-        local package="$2"
-        ${pkgs.jq}/bin/jq -r ".packages.\"$package\" | keys[]" "$repo_json" | grep -v "rc\|alpha\|beta" | sort -V | tail -1
-      }
-
-      extract_version_from_xml() {
-        local xml="$1"
-        local pkg="$2"
-        echo "$xml" | grep -A10 "path=\"$pkg\"" | head -10 | \
-          grep -oE "<(major|minor|micro)>[0-9]+" | \
-          sed 's/<[^>]*>//g' | \
-          tr '\n' '.' | sed 's/\.$//'
-      }
-
-      echo "Fetching versions..."
-      GOOGLE_REPO_XML=$(${pkgs.curl}/bin/curl -s "https://dl.google.com/android/repository/repository2-3.xml" 2>/dev/null)
-
-      if [ -z "$GOOGLE_REPO_XML" ]; then
-        echo "  ✗ Failed to fetch repository data"
-        echo ""
-        exit 1
-      fi
-
-      GOOGLE_PLATFORM=$(echo "$GOOGLE_REPO_XML" | grep -oE 'path="platforms;android-[0-9]+(\.[0-9]+)?"' | sed 's/path="platforms;android-//;s/"$//' | sort -V | tail -1)
-      GOOGLE_BUILD_TOOLS=$(echo "$GOOGLE_REPO_XML" | grep -oE 'path="build-tools;[0-9]+\.[0-9]+\.[0-9]+"' | sed 's/path="build-tools;//;s/"$//' | sort -V | tail -1)
-      GOOGLE_PLATFORM_TOOLS=$(extract_version_from_xml "$GOOGLE_REPO_XML" "platform-tools")
-      GOOGLE_EMULATOR=$(extract_version_from_xml "$GOOGLE_REPO_XML" "emulator")
-
-      PROJECT_REPO_JSON="${repoJsonForChecks}"
-      NIXPKGS_REPO_JSON="${pkgs.path}/pkgs/development/mobile/androidenv/repo.json"
-
-      PROJECT_PLATFORMS=$(latest_platform_from_json "$PROJECT_REPO_JSON")
-      PROJECT_BUILD_TOOLS=$(latest_package_from_json "$PROJECT_REPO_JSON" "build-tools")
-      PROJECT_PLATFORM_TOOLS=$(latest_package_from_json "$PROJECT_REPO_JSON" "platform-tools")
-      PROJECT_EMULATOR=$(latest_package_from_json "$PROJECT_REPO_JSON" "emulator")
-
-      NIXPKGS_PLATFORMS=$(latest_platform_from_json "$NIXPKGS_REPO_JSON")
-      NIXPKGS_BUILD_TOOLS=$(latest_package_from_json "$NIXPKGS_REPO_JSON" "build-tools")
-      NIXPKGS_PLATFORM_TOOLS=$(latest_package_from_json "$NIXPKGS_REPO_JSON" "platform-tools")
-      NIXPKGS_EMULATOR=$(latest_package_from_json "$NIXPKGS_REPO_JSON" "emulator")
-
-      echo ""
-      printf "%-16s %12s %12s %12s\n" "" "Google" "project" "nixpkgs"
-      echo "─────────────────────────────────────────────────────"
-      printf "%-16s %12s %12s %12s\n" "platforms" "$GOOGLE_PLATFORM" "$PROJECT_PLATFORMS" "$NIXPKGS_PLATFORMS"
-      printf "%-16s %12s %12s %12s\n" "build-tools" "$GOOGLE_BUILD_TOOLS" "$PROJECT_BUILD_TOOLS" "$NIXPKGS_BUILD_TOOLS"
-      printf "%-16s %12s %12s %12s\n" "platform-tools" "$GOOGLE_PLATFORM_TOOLS" "$PROJECT_PLATFORM_TOOLS" "$NIXPKGS_PLATFORM_TOOLS"
-      printf "%-16s %12s %12s %12s\n" "emulator" "$GOOGLE_EMULATOR" "$PROJECT_EMULATOR" "$NIXPKGS_EMULATOR"
-
-      LATEST_PLATFORM="$PROJECT_PLATFORMS"
-      LATEST_BUILD_TOOLS="$PROJECT_BUILD_TOOLS"
-      LATEST_PLATFORM_TOOLS="$PROJECT_PLATFORM_TOOLS"
-      LATEST_EMULATOR="$PROJECT_EMULATOR"
-
-      echo ""
-      echo "════════════════════════════════"
-      UPDATES_AVAILABLE=0
-
-      if [ "$CURRENT_PLATFORM" != "$LATEST_PLATFORM" ]; then
-        echo "⬆ platforms:      $CURRENT_PLATFORM → $LATEST_PLATFORM"
-        UPDATES_AVAILABLE=1
-      fi
-
-      if [ "$CURRENT_BUILD_TOOLS" != "$LATEST_BUILD_TOOLS" ]; then
-        echo "⬆ build-tools:    $CURRENT_BUILD_TOOLS → $LATEST_BUILD_TOOLS"
-        UPDATES_AVAILABLE=1
-      fi
-
-      if [ "$CURRENT_PLATFORM_TOOLS" != "$LATEST_PLATFORM_TOOLS" ]; then
-        echo "⬆ platform-tools: $CURRENT_PLATFORM_TOOLS → $LATEST_PLATFORM_TOOLS"
-        UPDATES_AVAILABLE=1
-      fi
-
-      if [ "$CURRENT_EMULATOR" != "$LATEST_EMULATOR" ]; then
-        echo "⬆ emulator:       $CURRENT_EMULATOR → $LATEST_EMULATOR"
-        UPDATES_AVAILABLE=1
-      fi
-
-      GOOGLE_NEWER=0
-      if [ "$GOOGLE_PLATFORM" != "$PROJECT_PLATFORMS" ] || \
-         [ "$GOOGLE_BUILD_TOOLS" != "$PROJECT_BUILD_TOOLS" ] || \
-         [ "$GOOGLE_PLATFORM_TOOLS" != "$PROJECT_PLATFORM_TOOLS" ] || \
-         [ "$GOOGLE_EMULATOR" != "$PROJECT_EMULATOR" ]; then
-        GOOGLE_NEWER=1
-      fi
-
-      if [ "$UPDATES_AVAILABLE" -eq 0 ]; then
-        echo "✓ All packages are up to date (using project Android SDK metadata)"
-      else
-        echo ""
-        echo "To update: edit androidSdk versions in devenv.nix and reload your shell."
-      fi
-
-      if [ "$GOOGLE_NEWER" -eq 1 ]; then
-        echo ""
-        echo "Google has versions newer than $PROJECT_REPO_JSON."
-        echo "Run 'update-android-sdk-repo', then edit androidSdk versions in devenv.nix if needed."
-      fi
+      exec ${checkSdkVersions}/bin/check-sdk-versions --config ${checkSdkVersionsConfig}
     '';
 
     scripts.update-android-sdk-repo.exec = updateRepoScript;

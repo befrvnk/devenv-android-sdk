@@ -72,6 +72,8 @@
             cp ${./repo.json} $out
           '';
 
+          check-sdk-versions = pkgs.callPackage ./tools/check-sdk-versions { };
+
           update-repo-json = updateRepoJson;
 
           default = self.packages.${system}.repo-json;
@@ -92,20 +94,23 @@
           pkgs = import nixpkgs { inherit system; };
         in
         {
-          repo-json-valid = pkgs.runCommand "android-sdk-repo-json-valid" { nativeBuildInputs = [ pkgs.jq ]; } ''
-            jq -e '
-              type == "object"
-              and has("addons")
-              and has("extras")
-              and has("images")
-              and has("latest")
-              and has("licenses")
-              and has("packages")
-            ' ${./repo.json} > /dev/null
+          repo-json-valid =
+            pkgs.runCommand "android-sdk-repo-json-valid" { nativeBuildInputs = [ pkgs.jq ]; }
+              ''
+                jq -e '
+                  type == "object"
+                  and has("addons")
+                  and has("extras")
+                  and has("images")
+                  and has("latest")
+                  and has("licenses")
+                  and has("packages")
+                ' ${./repo.json} > /dev/null
 
-            cp ${./repo.json} $out
-          '';
+                cp ${./repo.json} $out
+              '';
 
+          check-sdk-versions = self.packages.${system}.check-sdk-versions;
         }
       );
     };
