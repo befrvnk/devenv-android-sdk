@@ -140,6 +140,13 @@
               '';
 
           check-sdk-versions = self.packages.${system}.check-sdk-versions;
+
+          workflows = pkgs.runCommand "github-workflows-valid" { nativeBuildInputs = [ pkgs.actionlint ]; } ''
+            actionlint \
+              ${./.github/workflows/ci.yml} \
+              ${./.github/workflows/update-repo-json.yml}
+            touch $out
+          '';
         }
       );
     };

@@ -2,6 +2,7 @@
 
 {
   packages = [
+    pkgs.actionlint
     pkgs.go
     pkgs.gopls
     pkgs.nixfmt
@@ -15,6 +16,10 @@
   scripts.test-check-sdk-versions.exec = ''
     cd tools/check-sdk-versions/src
     go test ./...
+  '';
+
+  scripts.lint-workflows.exec = ''
+    actionlint
   '';
 
   scripts.check-repo.exec = ''

@@ -236,6 +236,7 @@ Useful scripts:
 ```bash
 fmt-check-sdk-versions   # gofmt for tools/check-sdk-versions/src
 test-check-sdk-versions  # Go unit tests for the checker
+lint-workflows           # actionlint for GitHub Actions workflows
 check-repo               # nix flake check
 ```
 
