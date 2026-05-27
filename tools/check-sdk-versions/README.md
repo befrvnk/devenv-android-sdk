@@ -37,7 +37,7 @@ From the repository root, enter the devenv shell:
 devenv shell
 ```
 
-The root `devenv.nix` provides Go, `gopls`, and `nixfmt`, plus helper scripts:
+The root `devenv.nix` provides Go, `gopls`, `nixfmt`, `actionlint`, and `shellcheck`, plus helper scripts:
 
 ```bash
 fmt-check-sdk-versions
@@ -45,6 +45,9 @@ fmt-check-sdk-versions
 
 test-check-sdk-versions
 # runs: cd tools/check-sdk-versions/src && go test ./...
+
+lint-workflows
+# runs: actionlint with shellcheck available for inline shell steps
 
 check-repo
 # runs: nix flake check
@@ -54,6 +57,7 @@ If you do not use devenv, you can run the same commands directly with Nix:
 
 ```bash
 nix shell nixpkgs#go --command sh -c 'cd tools/check-sdk-versions/src && go test ./...'
+nix shell nixpkgs#actionlint nixpkgs#shellcheck --command actionlint
 nix shell nixpkgs#nixfmt --command nixfmt module.nix flake.nix devenv.nix
 ```
 
