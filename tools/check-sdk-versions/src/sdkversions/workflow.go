@@ -14,25 +14,26 @@ import (
 
 const DefaultRawGitHubBaseURL = "https://raw.githubusercontent.com"
 
-func DefaultConfiguredVersions() ConfiguredVersions {
-	return ConfiguredVersions{
-		Platforms:     []string{"36"},
-		BuildTools:    []string{"37.0.0"},
-		PlatformTools: "37.0.0",
-		Emulator:      "36.6.6",
-		NDK:           "28.2.13676358",
-		CmdlineTools:  "11.0",
-		CMake:         []string{"3.22.1"},
+func LoadConfiguredVersions(path string) (ConfiguredVersions, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ConfiguredVersions{}, err
 	}
+
+	var configured ConfiguredVersions
+	if err := json.Unmarshal(data, &configured); err != nil {
+		return ConfiguredVersions{}, err
+	}
+	return configured, nil
 }
 
-func GenerateBundledMetadataReport(repoJSON, nixpkgsRepoJSON, googleURL string) (string, error) {
+func GenerateBundledMetadataReport(repoJSON, nixpkgsRepoJSON, googleURL string, configured ConfiguredVersions) (string, error) {
 	cfg := Config{
 		UsedRepoJSON:     repoJSON,
 		NixpkgsRepoJSON:  nixpkgsRepoJSON,
 		MetadataMode:     "bundled/pinned read-only",
 		MetadataWritable: false,
-		Configured:       DefaultConfiguredVersions(),
+		Configured:       configured,
 	}
 
 	var out bytes.Buffer

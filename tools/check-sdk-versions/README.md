@@ -85,6 +85,8 @@ nix run .#generate-sdk-version-report -- \
   --flake-lock "$PWD/flake.lock"
 ```
 
+The flake app injects a Nix-generated `--configured-json` file built from `android-sdk-defaults.nix`, which is also imported by `module.nix` for the module option defaults. This keeps the automation report in sync with the Nix defaults without hardcoding versions in Go.
+
 In GitHub Actions, pass `--github-output "$GITHUB_OUTPUT"` to also write the report to the `report` step output.
 
 ## Config shape
@@ -121,6 +123,7 @@ Unit tests cover:
 - end-to-end checker output with local fixture metadata and an in-process Google XML test server
 - missing configured-version reporting
 - flake.lock nixpkgs resolution for the automation helper
+- loading Nix-generated configured-version JSON for the automation helper
 - GitHub Actions multiline output formatting
 
 Run:

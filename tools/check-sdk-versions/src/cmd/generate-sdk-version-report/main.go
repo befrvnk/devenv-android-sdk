@@ -17,6 +17,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	flags := flag.NewFlagSet("generate-sdk-version-report", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	repoJSON := flags.String("repo-json", "repo.json", "bundled Android SDK repo.json to report on")
+	configuredJSON := flags.String("configured-json", "", "JSON file containing configured Android SDK versions")
 	flakeLock := flags.String("flake-lock", "flake.lock", "flake.lock used to resolve pinned nixpkgs metadata")
 	nixpkgsRepoJSON := flags.String("nixpkgs-repo-json", "", "explicit nixpkgs androidenv repo.json path; skips flake.lock resolution when set")
 	githubOutput := flags.String("github-output", "", "optional GitHub Actions output file path")
@@ -25,6 +26,16 @@ func run(args []string, stdout, stderr io.Writer) int {
 
 	if err := flags.Parse(args); err != nil {
 		return 2
+	}
+	if *configuredJSON == "" {
+		fmt.Fprintln(stderr, "error: --configured-json is required")
+		return 2
+	}
+
+	configured, err := sdkversions.LoadConfiguredVersions(*configuredJSON)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: failed to load configured versions: %v\n", err)
+		return 1
 	}
 
 	cleanup := func() {}
@@ -40,7 +51,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 	defer cleanup()
 
-	report, err := sdkversions.GenerateBundledMetadataReport(*repoJSON, resolvedNixpkgsRepoJSON, *googleURL)
+	report, err := sdkversions.GenerateBundledMetadataReport(*repoJSON, resolvedNixpkgsRepoJSON, *googleURL, configured)
 	if err != nil {
 		fmt.Fprintf(stderr, "error: failed to generate SDK version report: %v\n", err)
 		return 1

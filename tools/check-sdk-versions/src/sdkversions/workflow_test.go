@@ -86,7 +86,16 @@ func TestGenerateBundledMetadataReport(t *testing.T) {
   }
 }`)
 
-	report, err := GenerateBundledMetadataReport(repoJSON, repoJSON, "")
+	configured := ConfiguredVersions{
+		Platforms:     []string{"36"},
+		BuildTools:    []string{"37.0.0"},
+		PlatformTools: "37.0.0",
+		Emulator:      "36.6.6",
+		NDK:           "28.2.13676358",
+		CmdlineTools:  "11.0",
+		CMake:         []string{"3.22.1"},
+	}
+	report, err := GenerateBundledMetadataReport(repoJSON, repoJSON, "", configured)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,6 +108,26 @@ func TestGenerateBundledMetadataReport(t *testing.T) {
 		if !strings.Contains(report, want) {
 			t.Fatalf("report missing %q:\n%s", want, report)
 		}
+	}
+}
+
+func TestLoadConfiguredVersions(t *testing.T) {
+	path := writeTestFile(t, "configured.json", `{
+  "platforms": ["36"],
+  "buildTools": ["37.0.0"],
+  "platformTools": "37.0.0",
+  "emulator": "36.6.6",
+  "ndk": "28.2.13676358",
+  "cmdlineTools": "11.0",
+  "cmake": ["3.22.1"]
+}`)
+
+	configured, err := LoadConfiguredVersions(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if configured.Platforms[0] != "36" || configured.CmdlineTools != "11.0" || configured.CMake[0] != "3.22.1" {
+		t.Fatalf("unexpected configured versions: %#v", configured)
 	}
 }
 
