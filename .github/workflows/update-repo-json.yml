@@ -60,6 +60,15 @@ jobs:
         if: steps.verify.outputs.changed == 'true'
         run: nix flake check --print-build-logs
 
+      - name: Generate SDK version report
+        if: steps.verify.outputs.changed == 'true'
+        id: sdk-report
+        run: |
+          nix run .#generate-sdk-version-report -- \
+            --repo-json "$PWD/repo.json" \
+            --flake-lock "$PWD/flake.lock" \
+            --github-output "$GITHUB_OUTPUT"
+
       - name: Create or update pull request
         if: steps.verify.outputs.changed == 'true'
         id: cpr
@@ -79,6 +88,12 @@ jobs:
             - regenerates `repo.json` using `nix run .#update-repo-json`
             - fails if any file other than `repo.json` changes
             - runs `nix flake check` before opening/updating the PR
+
+            ## SDK version report
+
+            ```text
+            ${{ steps.sdk-report.outputs.report }}
+            ```
           add-paths: |
             repo.json
 

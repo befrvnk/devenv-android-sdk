@@ -22,6 +22,18 @@
         system:
         let
           pkgs = import nixpkgs { inherit system; };
+          androidSdkDefaults = import ./android-sdk-defaults.nix;
+          sdkVersionReportConfiguredJson = pkgs.writeText "sdk-version-report-configured.json" (
+            builtins.toJSON {
+              platforms = androidSdkDefaults.platforms;
+              buildTools = androidSdkDefaults.buildTools;
+              platformTools = androidSdkDefaults.platformTools;
+              emulator = androidSdkDefaults.emulator;
+              ndk = androidSdkDefaults.ndk;
+              cmdlineTools = androidSdkDefaults.cmdLineTools;
+              cmake = androidSdkDefaults.cmake;
+            }
+          );
 
           androidRepoRuby = pkgs.ruby.withPackages (
             rubyPackages: with rubyPackages; [
@@ -30,6 +42,15 @@
               slop
             ]
           );
+
+          generateSdkVersionReport = pkgs.writeShellApplication {
+            name = "generate-sdk-version-report";
+            text = ''
+              exec ${self.packages.${system}.check-sdk-versions}/bin/generate-sdk-version-report \
+                --configured-json ${sdkVersionReportConfiguredJson} \
+                "$@"
+            '';
+          };
 
           updateRepoJson = pkgs.writeShellApplication {
             name = "update-repo-json";
@@ -74,6 +95,8 @@
 
           check-sdk-versions = pkgs.callPackage ./tools/check-sdk-versions { };
 
+          generate-sdk-version-report = generateSdkVersionReport;
+
           update-repo-json = updateRepoJson;
 
           default = self.packages.${system}.repo-json;
@@ -85,6 +108,12 @@
           type = "app";
           program = "${self.packages.${system}.update-repo-json}/bin/update-repo-json";
           meta.description = "Update repo.json from Google's Android SDK repository metadata";
+        };
+
+        generate-sdk-version-report = {
+          type = "app";
+          program = "${self.packages.${system}.generate-sdk-version-report}/bin/generate-sdk-version-report";
+          meta.description = "Generate an Android SDK version report for metadata update PRs";
         };
       });
 

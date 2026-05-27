@@ -7,6 +7,7 @@
 
 let
   cfg = config.androidSdk;
+  androidSdkDefaults = import ./android-sdk-defaults.nix;
 
   androidRepoRuby = pkgs.ruby.withPackages (
     rubyPackages: with rubyPackages; [
@@ -182,49 +183,49 @@ in
 
     platforms = lib.mkOption {
       type = lib.types.listOf lib.types.str;
-      default = [ "36" ];
+      default = androidSdkDefaults.platforms;
       description = "Android platform versions to install.";
     };
 
     buildTools = lib.mkOption {
       type = lib.types.listOf lib.types.str;
-      default = [ "37.0.0" ];
+      default = androidSdkDefaults.buildTools;
       description = "Android build-tools versions to install.";
     };
 
     platformTools = lib.mkOption {
       type = lib.types.str;
-      default = "37.0.0";
+      default = androidSdkDefaults.platformTools;
       description = "Android platform-tools version to install.";
     };
 
     emulator = lib.mkOption {
       type = lib.types.str;
-      default = "36.6.6";
+      default = androidSdkDefaults.emulator;
       description = "Android emulator version to install.";
     };
 
     ndk = lib.mkOption {
       type = lib.types.str;
-      default = "28.2.13676358";
+      default = androidSdkDefaults.ndk;
       description = "Android NDK version to install.";
     };
 
     cmdLineTools = lib.mkOption {
       type = lib.types.str;
-      default = "11.0";
+      default = androidSdkDefaults.cmdLineTools;
       description = "Android command line tools version to install.";
     };
 
     tools = lib.mkOption {
       type = lib.types.str;
-      default = "26.1.1";
+      default = androidSdkDefaults.tools;
       description = "Legacy Android SDK tools version to install.";
     };
 
     cmake = lib.mkOption {
       type = lib.types.listOf lib.types.str;
-      default = [ "3.22.1" ];
+      default = androidSdkDefaults.cmake;
       description = "CMake versions to install.";
     };
 

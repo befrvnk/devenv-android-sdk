@@ -1,7 +1,6 @@
-package main
+package sdkversions
 
 import (
-	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -72,36 +71,6 @@ var packageSpecs = []PackageSpec{
 			return c.CMake
 		},
 	},
-}
-
-func main() {
-	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
-}
-
-func run(args []string, stdout, stderr io.Writer) int {
-	flags := flag.NewFlagSet("check-sdk-versions", flag.ContinueOnError)
-	flags.SetOutput(stderr)
-	configPath := flags.String("config", "", "path to check-sdk-versions JSON config")
-	googleURL := flags.String("google-url", defaultGoogleRepositoryURL, "Google Android SDK repository XML URL")
-	if err := flags.Parse(args); err != nil {
-		return 2
-	}
-	if *configPath == "" {
-		fmt.Fprintln(stderr, "error: --config is required")
-		return 2
-	}
-
-	cfg, err := LoadConfig(*configPath)
-	if err != nil {
-		fmt.Fprintf(stderr, "error: failed to load config: %v\n", err)
-		return 1
-	}
-
-	if err := CheckSDKVersions(cfg, *googleURL, stdout); err != nil {
-		fmt.Fprintf(stderr, "error: %v\n", err)
-		return 1
-	}
-	return 0
 }
 
 func CheckSDKVersions(cfg Config, googleURL string, out io.Writer) error {
