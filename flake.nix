@@ -141,12 +141,28 @@
 
           check-sdk-versions = self.packages.${system}.check-sdk-versions;
 
-          workflows = pkgs.runCommand "github-workflows-valid" { nativeBuildInputs = [ pkgs.actionlint ]; } ''
-            actionlint \
-              ${./.github/workflows/ci.yml} \
-              ${./.github/workflows/update-repo-json.yml}
-            touch $out
-          '';
+          workflows =
+            pkgs.runCommand "github-workflows-valid"
+              {
+                nativeBuildInputs = [
+                  pkgs.actionlint
+                  pkgs.findutils
+                  pkgs.shellcheck
+                ];
+              }
+              ''
+                mapfile -d "" workflow_files < <(
+                  find ${./.github/workflows} -type f \( -name '*.yml' -o -name '*.yaml' \) -print0 | sort -z
+                )
+
+                if [ "''${#workflow_files[@]}" -eq 0 ]; then
+                  echo "No GitHub Actions workflow files found." >&2
+                  exit 1
+                fi
+
+                actionlint "''${workflow_files[@]}"
+                touch $out
+              '';
         }
       );
     };

@@ -6,6 +6,7 @@
     pkgs.go
     pkgs.gopls
     pkgs.nixfmt
+    pkgs.shellcheck
   ];
 
   scripts.fmt-check-sdk-versions.exec = ''
