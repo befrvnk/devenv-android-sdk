@@ -43,6 +43,8 @@
             ]
           );
 
+          gradleIntegration = pkgs.callPackage ./tools/gradle-integration { };
+
           generateSdkVersionReport = pkgs.writeShellApplication {
             name = "generate-sdk-version-report";
             text = ''
@@ -95,6 +97,8 @@
 
           check-sdk-versions = pkgs.callPackage ./tools/check-sdk-versions { };
 
+          gradle-integration = gradleIntegration;
+
           generate-sdk-version-report = generateSdkVersionReport;
 
           update-repo-json = updateRepoJson;
@@ -121,6 +125,51 @@
         system:
         let
           pkgs = import nixpkgs { inherit system; };
+          lib = nixpkgs.lib;
+
+          evalGradleIntegrationModule =
+            enabled:
+            (lib.evalModules {
+              specialArgs = { inherit pkgs; };
+              modules = [
+                (
+                  { lib, ... }:
+                  {
+                    options = {
+                      packages = lib.mkOption {
+                        type = lib.types.anything;
+                        default = [ ];
+                      };
+                      env = lib.mkOption {
+                        type = lib.types.anything;
+                        default = { };
+                      };
+                      scripts = lib.mkOption {
+                        type = lib.types.anything;
+                        default = { };
+                      };
+                      enterShell = lib.mkOption {
+                        type = lib.types.lines;
+                        default = "";
+                      };
+                    };
+                  }
+                )
+                self.devenvModules.default
+                {
+                  androidSdk = {
+                    enable = true;
+                    addSdkPaths = false;
+                    gradleIntegration.enable = enabled;
+                  };
+                }
+              ];
+            }).config.enterShell;
+
+          disabledGradleIntegrationEnterShell = evalGradleIntegrationModule false;
+          enabledGradleIntegrationEnterShell = evalGradleIntegrationModule true;
+          disabledGradleIntegrationScript = pkgs.writeShellScript "disabled-gradle-integration-enter-shell" disabledGradleIntegrationEnterShell;
+          enabledGradleIntegrationScript = pkgs.writeShellScript "enabled-gradle-integration-enter-shell" enabledGradleIntegrationEnterShell;
         in
         {
           repo-json-valid =
@@ -140,6 +189,37 @@
               '';
 
           check-sdk-versions = self.packages.${system}.check-sdk-versions;
+
+          gradle-integration =
+            assert disabledGradleIntegrationEnterShell == "";
+            assert lib.hasInfix "sync-android-gradle-integration" enabledGradleIntegrationEnterShell;
+            pkgs.runCommand "android-sdk-gradle-integration-tests"
+              {
+                nativeBuildInputs = [
+                  pkgs.coreutils
+                  pkgs.gnugrep
+                  self.packages.${system}.gradle-integration
+                ];
+              }
+              ''
+                project_root="$TMPDIR/project"
+                android_home="$TMPDIR/fake-android-sdk"
+                mkdir -p "$project_root" "$android_home"
+
+                DEVENV_ROOT="$project_root" ANDROID_HOME="$android_home" \
+                  ${disabledGradleIntegrationScript}
+                test ! -e "$project_root/.devenv/android-sdk"
+                test ! -e "$project_root/local.properties"
+
+                DEVENV_ROOT="$project_root" ANDROID_HOME="$android_home" \
+                  ${enabledGradleIntegrationScript}
+                test -L "$project_root/.devenv/android-sdk"
+                test "$(readlink "$project_root/.devenv/android-sdk")" = "$android_home"
+                grep -Fx "sdk.dir=$project_root/.devenv/android-sdk" \
+                  "$project_root/local.properties" > /dev/null
+
+                touch $out
+              '';
 
           workflows =
             pkgs.runCommand "github-workflows-valid"
