@@ -28,5 +28,9 @@
 
     systemImageTypes = [ "google_apis_playstore" ];
     abis = [ "x86_64" ];
+
+    # Keep Gradle and Android Studio on a stable project-local SDK path when
+    # changing the Nix-composed SDK changes ANDROID_HOME.
+    gradleIntegration.enable = true;
   };
 }

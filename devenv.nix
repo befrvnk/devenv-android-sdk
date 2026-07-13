@@ -19,6 +19,16 @@
     go test ./...
   '';
 
+  scripts.fmt-gradle-integration.exec = ''
+    cd tools/gradle-integration/src
+    gofmt -w .
+  '';
+
+  scripts.test-gradle-integration.exec = ''
+    cd tools/gradle-integration/src
+    go test ./...
+  '';
+
   scripts.lint-workflows.exec = ''
     actionlint
   '';

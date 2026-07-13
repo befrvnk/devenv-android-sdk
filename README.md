@@ -17,6 +17,7 @@ This is useful when Google has released new Android SDK packages but nixpkgs' ve
   - `ANDROID_SDK_ROOT`
   - `ANDROID_NDK_ROOT`
 - Optionally sets Gradle's `aapt2FromMavenOverride` to the Nix-provided `aapt2`
+- Provides an opt-in Gradle/Android Studio integration that keeps `local.properties` on a stable project-local SDK path
 - Fixes Android SDK source ZIPs with duplicate entries (for example API 37.0 sources) by unpacking them non-interactively
 
 ## Quick start
@@ -105,6 +106,71 @@ Then reload your shell:
 direnv reload
 # or: devenv shell
 ```
+
+## Gradle and Android Studio integration
+
+Nix store paths are immutable and include a hash derived from their contents. Changing the Android SDK composition—for example, adding a Build Tools version—normally changes `$ANDROID_HOME` from one `/nix/store/<hash>-androidsdk/...` path to another. Gradle and Android Studio often retain the old absolute path in the ignored, machine-local `local.properties` file, which can make an updated SDK appear incomplete or unwritable.
+
+The optional Gradle integration avoids stale store paths by maintaining this indirection on every shell entry:
+
+```text
+<project>/.devenv/android-sdk -> $ANDROID_HOME
+
+# local.properties
+sdk.dir=<absolute-project-path>/.devenv/android-sdk
+```
+
+Enable it explicitly in `devenv.nix`:
+
+```nix
+androidSdk = {
+  enable = true;
+
+  platforms = [ "35" ];
+  buildTools = [ "36.0.0" ];
+
+  gradleIntegration = {
+    enable = true;
+    localPropertiesPath = "local.properties";
+    sdkLinkPath = ".devenv/android-sdk";
+  };
+};
+```
+
+The integration is **disabled by default** because not every SDK consumer is a Gradle project and monorepos may use different layouts. Both paths default to the values shown above and are resolved relative to the devenv project root (`DEVENV_ROOT`), not the directory from which the shell was entered. Relative alternatives and absolute paths are supported, for example:
+
+```nix
+androidSdk.gradleIntegration = {
+  enable = true;
+  localPropertiesPath = "android/local.properties";
+  sdkLinkPath = ".devenv/sdks/android";
+};
+```
+
+On shell entry, the module creates or refreshes the SDK symlink without copying or making the Nix SDK writable. It creates `local.properties` when needed, updates or adds exactly one active `sdk.dir` entry, and preserves comments, blank lines, ordering, and unrelated properties such as tokens or plugin metadata. `local.properties` remains a mutable machine-local file. Existing regular files are updated atomically while preserving their permission bits. If `local.properties` is itself a valid symlink, the integration writes through it and preserves both the symlink and its target file. Conflicting non-symlink objects at `sdkLinkPath`, broken `local.properties` symlinks, and property files that require an update but are unwritable fail with an actionable error instead of being replaced.
+
+After changing SDK versions or composition, reload the environment so the stable link points to the new SDK:
+
+```bash
+direnv reload
+# or: devenv shell
+```
+
+You can then verify the paths without displaying unrelated `local.properties` content:
+
+```bash
+readlink .devenv/android-sdk
+grep '^sdk.dir=' local.properties
+```
+
+Typical output is:
+
+```text
+/nix/store/<current-hash>-androidsdk/libexec/android-sdk
+sdk.dir=/absolute/path/to/project/.devenv/android-sdk
+```
+
+Android Studio can continue using `local.properties` after it launches: `sdk.dir` stays constant while future environment reloads refresh the project-local symlink to the current `$ANDROID_HOME`.
 
 ## Checking available versions
 
@@ -220,6 +286,13 @@ androidSdk = {
 
   setGradleAapt2Override = true;
   addSdkPaths = true;
+
+  # Disabled by default.
+  gradleIntegration = {
+    enable = false;
+    localPropertiesPath = "local.properties";
+    sdkLinkPath = ".devenv/android-sdk";
+  };
 };
 ```
 
@@ -236,6 +309,8 @@ Useful scripts:
 ```bash
 fmt-check-sdk-versions   # gofmt for tools/check-sdk-versions/src
 test-check-sdk-versions  # Go unit tests for the checker
+fmt-gradle-integration   # gofmt for tools/gradle-integration/src
+test-gradle-integration  # Go unit tests for Gradle synchronization
 lint-workflows           # actionlint + shellcheck for GitHub Actions workflows
 check-repo               # nix flake check
 ```

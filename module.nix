@@ -91,6 +91,7 @@ let
     if cfg.repoJsonWritablePath != null then "project-local writable" else "bundled/pinned read-only";
 
   checkSdkVersions = pkgs.callPackage ./tools/check-sdk-versions { };
+  gradleIntegration = pkgs.callPackage ./tools/gradle-integration { };
 
   checkSdkVersionsConfig = pkgs.writeText "check-sdk-versions-config.json" (
     builtins.toJSON {
@@ -324,6 +325,31 @@ in
       default = true;
       description = "Whether to add Android SDK tools to PATH in enterShell.";
     };
+
+    gradleIntegration = {
+      enable = lib.mkEnableOption "Gradle local.properties synchronization through a stable project-local SDK symlink";
+
+      localPropertiesPath = lib.mkOption {
+        type = lib.types.str;
+        default = "local.properties";
+        example = "android/local.properties";
+        description = ''
+          Path to the Gradle local.properties file. Relative paths are resolved
+          from the devenv project root; absolute paths are also supported.
+        '';
+      };
+
+      sdkLinkPath = lib.mkOption {
+        type = lib.types.str;
+        default = ".devenv/android-sdk";
+        example = ".android/android-sdk";
+        description = ''
+          Path for the stable symlink to ANDROID_HOME. Relative paths are
+          resolved from the devenv project root; absolute paths are also
+          supported.
+        '';
+      };
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -347,17 +373,22 @@ in
 
     scripts.update-android-sdk-repo.exec = updateRepoScript;
 
-    enterShell = lib.mkIf cfg.addSdkPaths ''
-      export PATH="$PATH:$ANDROID_HOME/tools:$ANDROID_HOME/tools/bin:$ANDROID_HOME/platform-tools"
-      export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:${
-        pkgs.lib.makeLibraryPath [
-          pkgs.vulkan-loader
-          pkgs.libGL
-        ]
-      }:$ANDROID_HOME/build-tools/${builtins.head cfg.buildTools}/lib64/:$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/lib/:$LD_LIBRARY_PATH"
-      export ANDROID_USER_HOME="$(pwd)/.android"
-      export ANDROID_AVD_HOME="$ANDROID_USER_HOME/avd"
-      mkdir -p "$ANDROID_USER_HOME" "$ANDROID_AVD_HOME"
-    '';
+    enterShell = lib.mkMerge [
+      (lib.mkIf cfg.addSdkPaths ''
+        export PATH="$PATH:$ANDROID_HOME/tools:$ANDROID_HOME/tools/bin:$ANDROID_HOME/platform-tools"
+        export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:${
+          pkgs.lib.makeLibraryPath [
+            pkgs.vulkan-loader
+            pkgs.libGL
+          ]
+        }:$ANDROID_HOME/build-tools/${builtins.head cfg.buildTools}/lib64/:$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/lib/:$LD_LIBRARY_PATH"
+        export ANDROID_USER_HOME="$(pwd)/.android"
+        export ANDROID_AVD_HOME="$ANDROID_USER_HOME/avd"
+        mkdir -p "$ANDROID_USER_HOME" "$ANDROID_AVD_HOME"
+      '')
+      (lib.mkIf cfg.gradleIntegration.enable ''
+        ${gradleIntegration}/bin/sync-android-gradle-integration ${lib.escapeShellArg cfg.gradleIntegration.localPropertiesPath} ${lib.escapeShellArg cfg.gradleIntegration.sdkLinkPath}
+      '')
+    ];
   };
 }
